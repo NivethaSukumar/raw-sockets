@@ -44,6 +44,7 @@ int main(int argc, char *argv[]) {
 	struct sockaddr saddr;
 	struct sockaddr_ll sadr_ll;
 	int saddr_len = sizeof(saddr);
+	
 	/*Get interface name*/
 	
 	if(argc < 1) {
@@ -58,7 +59,7 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 	
-	if(send_soc < -1) {
+	if(send_soc < 0) {
 		printf("Failed to create socket send");
 		exit(1);
 	}
@@ -78,7 +79,7 @@ int main(int argc, char *argv[]) {
 	memset(&if_mac, 0, sizeof(struct ifreq));
 	strncpy(if_mac.ifr_name, ifName, IFNAMSIZ-1);
 	
-	if((ioctl(send_soc, SIOCGIFHWADDR, &if_mac)) <0){
+	if((ioctl(send_soc, SIOCGIFHWADDR, (void*)&if_mac)) <0){
 		
 		printf("Error in SIOCGIFHWADDR ioctl reading %s\n", strerror(errno));
 		close(send_soc);
@@ -99,14 +100,14 @@ int main(int argc, char *argv[]) {
 			printf("Failed to get packets\n");
 			return 1;
 		} else {
-			printf("Received packets");
+			printf("Received packets\n");
 		}
 		
-		// struct iphdr *ip_packet = (struct iphdr*)buffer;
-		// memset(&src_socket_address, 0, sizeof(src_socket_address));
-		// src_socket_address.sin_addr.s_addr = ip_packet->saddr;
-		// memset(&dest_socket_address, 0, sizeof(dest_socket_address));
-		// dest_socket_address.sin_addr.s_addr = ip_packet->daddr;
+		struct iphdr *ip_packet = (struct iphdr*)buffer;
+		memset(&src_socket_address, 0, sizeof(src_socket_address));
+		src_socket_address.sin_addr.s_addr = ip_packet->saddr;
+		memset(&dest_socket_address, 0, sizeof(dest_socket_address));
+		dest_socket_address.sin_addr.s_addr = ip_packet->daddr;
 		
 		
 		
@@ -155,20 +156,23 @@ int main(int argc, char *argv[]) {
 		 
 		 /* Send Packet */
 		 
-		 if (sendto(send_soc, buffer, packet_size, 0, (const struct sockaddr*)&sadr_ll, sizeof(struct sockaddr_ll)) < 0) {
-		 	printf("Sending packet failed\n");
+		 int send_len = sendto(send_soc, buffer, packet_size, 0, (struct sockaddr*)&sadr_ll, sizeof(struct sockaddr_ll));
+		 
+		 if(send_len < 0) {
+		 	printf("Sending packet failed %d %s\n", send_len, strerror(errno));
 		 	close(send_soc);
+			exit(EXIT_FAILURE);
 		 } else {
-		 	printf("Sending packet successful");
+		 	printf("Sending packet successful\n");
 		 }
 		 	
 
 		
-		// printf("Yes, Incoming packet: \n");
-		// printf("Packet size (bytes): %d\n", ntohs(ip_packet->tot_len));
-		// printf("Source address: %s\n", (char*)inet_ntoa(src_socket_address.sin_addr));
-		// printf("destination address: %s\n", (char*)inet_ntoa(dest_socket_address.sin_addr));
-		// printf("Identification: %d\n", ntohs(ip_packet->id));
+		printf("Yes, Incoming packet: \n");
+		printf("Packet size (bytes): %d\n", packet_size);
+		printf("Source address: %s\n", (char*)inet_ntoa(src_socket_address.sin_addr));
+		printf("destination address: %s\n", (char*)inet_ntoa(dest_socket_address.sin_addr));
+		printf("Identification: %d\n", ntohs(ip_packet->id));
 		printf("================================================\n");
 	}
 	close(send_soc);
