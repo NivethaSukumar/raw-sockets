@@ -14,16 +14,16 @@
 #include <netinet/ether.h>
 #include <unistd.h>
 #define BUF_SIZE   1024
-#define DEFAULT_IF   "eth0"
+#define DEFAULT_IF   "enp0s31f6"
 
 #define DESTMAC0 0xc8
 #define DESTMAC1 0x5b
 #define DESTMAC2 0x76
-#define DESTMAC3 0xd2
-#define DESTMAC4 0x7a
-#define DESTMAC5 0x67
+#define DESTMAC3 0x46
+#define DESTMAC4 0xc0
+#define DESTMAC5 0x94
 
-int main(int argc, char *argv[]) {
+int main() {
 
 	struct sockaddr_in src_socket_address, dest_socket_address;
 	struct ifreq ifreq_i;
@@ -40,18 +40,11 @@ int main(int argc, char *argv[]) {
 	
 	int send_soc = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW);
 	
-	struct ethhdr *eth = (struct ethhdr*)sendbuf;
 	struct sockaddr saddr;
 	struct sockaddr_ll sadr_ll;
 	int saddr_len = sizeof(saddr);
 	
-	/*Get interface name*/
-	
-	if(argc < 1) {
-		strcpy(ifName, argv[1]);
-	} else {
-		strcpy(ifName, DEFAULT_IF);
-	}
+	strcpy(ifName, DEFAULT_IF);
 	
 	
 	if(sock < 0) {
@@ -73,6 +66,17 @@ int main(int argc, char *argv[]) {
 		close(send_soc);
 		exit(EXIT_FAILURE);	
 
+	}
+
+	/* Bind our socket to this interface*/
+	sadr_ll.sll_family = AF_PACKET;
+	sadr_ll.sll_ifindex = ifreq_i.ifr_ifindex;
+	sadr_ll.sll_protocol = htons(ETH_P_ALL);
+
+	if((bind(send_soc, (struct sockaddr*)&sadr_ll, sizeof(sadr_ll))) == -1) {
+		printf("Error binding raw socket to interface\n");
+		close(send_soc);
+		exit(-1);
 	}
 	
 	/*Get the mac address of the interface*/
@@ -98,52 +102,18 @@ int main(int argc, char *argv[]) {
 		packet_size = recvfrom(sock, buffer, 65536, 0, &saddr, (socklen_t*)&saddr_len);
 		if(packet_size == -1) {
 			printf("Failed to get packets\n");
+			close(sock);
 			return 1;
 		} else {
 			printf("Received packets\n");
 		}
 		
-		struct iphdr *ip_packet = (struct iphdr*)buffer;
-		memset(&src_socket_address, 0, sizeof(src_socket_address));
-		src_socket_address.sin_addr.s_addr = ip_packet->saddr;
-		memset(&dest_socket_address, 0, sizeof(dest_socket_address));
-		dest_socket_address.sin_addr.s_addr = ip_packet->daddr;
+		// struct iphdr *ip_packet = (struct iphdr*)buffer;
+		// memset(&src_socket_address, 0, sizeof(src_socket_address));
+		// src_socket_address.sin_addr.s_addr = ip_packet->saddr;
+		// memset(&dest_socket_address, 0, sizeof(dest_socket_address));
+		// dest_socket_address.sin_addr.s_addr = ip_packet->daddr;
 		
-		
-		
-		
-		
-		memset(sendbuf, 0, BUF_SIZE);
-		
-		/*Construct ethernet header*/
-		
-		eth->h_source[0] = (unsigned char)(if_mac.ifr_hwaddr.sa_data[0]);
-		eth->h_source[1] = (unsigned char)(if_mac.ifr_hwaddr.sa_data[1]);
-		eth->h_source[2] = (unsigned char)(if_mac.ifr_hwaddr.sa_data[2]);
-		eth->h_source[3] = (unsigned char)(if_mac.ifr_hwaddr.sa_data[3]);
-		eth->h_source[4] = (unsigned char)(if_mac.ifr_hwaddr.sa_data[4]);
-		eth->h_source[5] = (unsigned char)(if_mac.ifr_hwaddr.sa_data[5]);
-		
-		/*filling destination mac address*/
-		 eth->h_dest[0] = DESTMAC0;
-		 eth->h_dest[1] = DESTMAC1;
-		 eth->h_dest[2] = DESTMAC2;
-		 eth->h_dest[3] = DESTMAC3;
-		 eth->h_dest[4] = DESTMAC4;
-		 eth->h_dest[5] = DESTMAC5;
-		 
-		 eth->h_proto = htons(ETH_P_IP);
-		 
-		 /* end of ethernet header*/
-		 tx_len += sizeof(struct ethhdr);
-		 
-		 /*Packet data for dummy data*/
-		 sendbuf[tx_len++] = 0xAA;
-		 sendbuf[tx_len++] = 0xBB;
-		 sendbuf[tx_len++] = 0xCC;
-		 sendbuf[tx_len++] = 0xDD;
-		 sendbuf[tx_len++] = 0xEE;
-		 
 		 sadr_ll.sll_ifindex = ifreq_i.ifr_ifindex;
 		 sadr_ll.sll_halen = ETH_ALEN;
 		 
@@ -165,17 +135,14 @@ int main(int argc, char *argv[]) {
 		 } else {
 		 	printf("Sending packet successful\n");
 		 }
-		 	
-
 		
 		printf("Yes, Incoming packet: \n");
 		printf("Packet size (bytes): %d\n", packet_size);
 		printf("Source address: %s\n", (char*)inet_ntoa(src_socket_address.sin_addr));
 		printf("destination address: %s\n", (char*)inet_ntoa(dest_socket_address.sin_addr));
-		printf("Identification: %d\n", ntohs(ip_packet->id));
+		//printf("Identification: %d\n", ntohs(ip_packet->id));
 		printf("================================================\n");
 	}
 	close(send_soc);
 	return 0;
 }
-		
