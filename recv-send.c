@@ -14,14 +14,14 @@
 #include <netinet/ether.h>
 #include <unistd.h>
 #define BUF_SIZE   1024
-#define DEFAULT_IF   "enp0s31f6"
-
-#define DESTMAC0 0xc8
-#define DESTMAC1 0x5b
-#define DESTMAC2 0x76
-#define DESTMAC3 0x46
-#define DESTMAC4 0xc0
-#define DESTMAC5 0x94
+#define DEFAULT_IF   "wlp1s0"
+//68:07:15:35:0D:04
+#define DESTMAC0 0x68
+#define DESTMAC1 0x07
+#define DESTMAC2 0x15
+#define DESTMAC3 0x35
+#define DESTMAC4 0x0d
+#define DESTMAC5 0x04
 
 int main() {
 
@@ -98,8 +98,7 @@ int main() {
 	if((ioctl(send_soc, SIOCGIFADDR, &ifreq_ip)) <0)
 		printf("error in SIOCGIFADDR ip address reading\n");*/
 	
-	while (1) {
-		packet_size = recvfrom(sock, buffer, 65536, 0, &saddr, (socklen_t*)&saddr_len);
+	repeat: packet_size = recvfrom(sock, buffer, 65536, 0, &saddr, (socklen_t*)&saddr_len);
 		if(packet_size == -1) {
 			printf("Failed to get packets\n");
 			close(sock);
@@ -108,11 +107,11 @@ int main() {
 			printf("Received packets\n");
 		}
 		
-		// struct iphdr *ip_packet = (struct iphdr*)buffer;
-		// memset(&src_socket_address, 0, sizeof(src_socket_address));
-		// src_socket_address.sin_addr.s_addr = ip_packet->saddr;
-		// memset(&dest_socket_address, 0, sizeof(dest_socket_address));
-		// dest_socket_address.sin_addr.s_addr = ip_packet->daddr;
+		struct iphdr *ip_packet = (struct iphdr*)buffer;
+		memset(&src_socket_address, 0, sizeof(src_socket_address));
+		src_socket_address.sin_addr.s_addr = ip_packet->saddr;
+		memset(&dest_socket_address, 0, sizeof(dest_socket_address));
+		dest_socket_address.sin_addr.s_addr = ip_packet->daddr;
 		
 		 sadr_ll.sll_ifindex = ifreq_i.ifr_ifindex;
 		 sadr_ll.sll_halen = ETH_ALEN;
@@ -130,8 +129,7 @@ int main() {
 		 
 		 if(send_len < 0) {
 		 	printf("Sending packet failed %d %s\n", send_len, strerror(errno));
-		 	close(send_soc);
-			exit(EXIT_FAILURE);
+		 	goto done;
 		 } else {
 		 	printf("Sending packet successful\n");
 		 }
@@ -140,9 +138,9 @@ int main() {
 		printf("Packet size (bytes): %d\n", packet_size);
 		printf("Source address: %s\n", (char*)inet_ntoa(src_socket_address.sin_addr));
 		printf("destination address: %s\n", (char*)inet_ntoa(dest_socket_address.sin_addr));
-		//printf("Identification: %d\n", ntohs(ip_packet->id));
+		printf("Identification: %d\n", ntohs(ip_packet->id));
 		printf("================================================\n");
-	}
-	close(send_soc);
-	return 0;
+done:  goto repeat;
+		close(send_soc);
+		return 0;
 }
