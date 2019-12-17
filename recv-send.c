@@ -13,134 +13,66 @@
 #include <net/if.h>
 #include <netinet/ether.h>
 #include <unistd.h>
-#define BUF_SIZE   1024
-#define DEFAULT_IF   "wlp1s0"
-//68:07:15:35:0D:04
-#define DESTMAC0 0x68
-#define DESTMAC1 0x07
-#define DESTMAC2 0x15
-#define DESTMAC3 0x35
-#define DESTMAC4 0x0d
-#define DESTMAC5 0x04
+int main()
+{
+    int saddr_size , data_size, daddr_size, bytes_sent;
+    struct sockaddr_ll saddr, daddr;
+    unsigned char *buffer=malloc(65535);
 
-int main() {
+    int sock_raw = socket( AF_PACKET , SOCK_RAW , htons(ETH_P_ALL)) ; //For receiving
+    int sock = socket( PF_PACKET , SOCK_RAW , IPPROTO_RAW) ;            //For sending
 
-	struct sockaddr_in src_socket_address, dest_socket_address;
-	struct ifreq ifreq_i;
-	struct ifreq if_mac;
-	struct ifreq ifreq_ip;
-	int packet_size;
-	char ifName[IFNAMSIZ];
-	char sendbuf[BUF_SIZE];
-	
-	int tx_len = 0;
-	unsigned char *buffer = (unsigned char*)malloc(65536);
-	
-	int sock = socket (AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-	
-	int send_soc = socket(AF_PACKET, SOCK_RAW, IPPROTO_RAW);
-	
-	struct sockaddr saddr;
-	struct sockaddr_ll sadr_ll;
-	int saddr_len = sizeof(saddr);
-	
-	strcpy(ifName, DEFAULT_IF);
-	
-	
-	if(sock < 0) {
-		printf("Failed to create socket");
-		exit(1);
-	}
-	
-	if(send_soc < 0) {
-		printf("Failed to create socket send");
-		exit(1);
-	}
+    memset(&saddr, 0, sizeof(struct sockaddr_ll));
+    saddr.sll_family = AF_PACKET;
+    saddr.sll_protocol = htons(ETH_P_ALL);
+    saddr.sll_ifindex = if_nametoindex("eth1");
+    if (bind(sock_raw, (struct sockaddr*) &saddr, sizeof(saddr)) < 0) {
+        perror("bind failed\n");
+        close(sock_raw);
+    }
 
-	/* Get the index of the interface to send on */
-	memset(&ifreq_i, 0, sizeof(struct ifreq));
-	strncpy(ifreq_i.ifr_name, ifName, IFNAMSIZ-1);
-	
-	if((ioctl(send_soc, SIOCGIFINDEX, (void*)&ifreq_i)) < 0){
-		printf("Error in index ioctl reading %s\n", strerror(errno));
-		close(send_soc);
-		exit(EXIT_FAILURE);	
+    memset(&daddr, 0, sizeof(struct sockaddr_ll));
+    daddr.sll_family = AF_PACKET;
+    daddr.sll_protocol = htons(ETH_P_ALL);
+    daddr.sll_ifindex = if_nametoindex("eth0");
+    if (bind(sock, (struct sockaddr*) &daddr, sizeof(daddr)) < 0) {
+      perror("bind failed\n");
+      close(sock);
+    }
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "eth0");
+    if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, (void *)&ifr, sizeof(ifr)) < 0) {
+        perror("bind to eth1");
+        }
 
-	}
+    while(1)
+    {
+        saddr_size = sizeof (struct sockaddr);
+        daddr_size = sizeof (struct sockaddr);
+        //Receive a packet
+        data_size = recvfrom(sock_raw , buffer , 65536 , 0 ,(struct sockaddr *) &saddr , (socklen_t*)&saddr_size);
 
-	/* Bind our socket to this interface*/
-	sadr_ll.sll_family = AF_PACKET;
-	sadr_ll.sll_ifindex = ifreq_i.ifr_ifindex;
-	sadr_ll.sll_protocol = htons(ETH_P_ALL);
+        if(data_size <0 )
+        {
+            printf("Recvfrom error , failed to get packets\n");
+            return 1;
+        }
+        else{
+        printf("Received %d bytes\n",data_size);
 
-	if((bind(send_soc, (struct sockaddr*)&sadr_ll, sizeof(sadr_ll))) == -1) {
-		printf("Error binding raw socket to interface\n");
-		close(send_soc);
-		exit(-1);
-	}
-	
-	/*Get the mac address of the interface*/
-	memset(&if_mac, 0, sizeof(struct ifreq));
-	strncpy(if_mac.ifr_name, ifName, IFNAMSIZ-1);
-	
-	if((ioctl(send_soc, SIOCGIFHWADDR, (void*)&if_mac)) <0){
-		
-		printf("Error in SIOCGIFHWADDR ioctl reading %s\n", strerror(errno));
-		close(send_soc);
-		exit(EXIT_FAILURE);
-	}
+       
 
-		
-	/*Get the ip address of the interface"
-	memset(&ifreq_ip, 0, sizeof(struct ifreq));
-	strncpy(ifreq_ip.ifr_name, ifName, IFNAMSIZ-1);
-	
-	if((ioctl(send_soc, SIOCGIFADDR, &ifreq_ip)) <0)
-		printf("error in SIOCGIFADDR ip address reading\n");*/
-	
-	repeat: packet_size = recvfrom(sock, buffer, 65536, 0, &saddr, (socklen_t*)&saddr_len);
-		if(packet_size == -1) {
-			printf("Failed to get packets\n");
-			close(sock);
-			return 1;
-		} else {
-			printf("Received packets\n");
-		}
-		
-		struct iphdr *ip_packet = (struct iphdr*)buffer;
-		memset(&src_socket_address, 0, sizeof(src_socket_address));
-		src_socket_address.sin_addr.s_addr = ip_packet->saddr;
-		memset(&dest_socket_address, 0, sizeof(dest_socket_address));
-		dest_socket_address.sin_addr.s_addr = ip_packet->daddr;
-		
-		 sadr_ll.sll_ifindex = ifreq_i.ifr_ifindex;
-		 sadr_ll.sll_halen = ETH_ALEN;
-		 
-		 sadr_ll.sll_addr[0] = DESTMAC0;
-		 sadr_ll.sll_addr[1] = DESTMAC1;
-		 sadr_ll.sll_addr[2] = DESTMAC2;
-		 sadr_ll.sll_addr[3] = DESTMAC3;
-		 sadr_ll.sll_addr[4] = DESTMAC4;
-		 sadr_ll.sll_addr[5] = DESTMAC5;
-		 
-		 /* Send Packet */
-		 
-		 int send_len = sendto(send_soc, buffer, packet_size, 0, (struct sockaddr*)&sadr_ll, sizeof(struct sockaddr_ll));
-		 
-		 if(send_len < 0) {
-		 	printf("Sending packet failed %d %s\n", send_len, strerror(errno));
-		 	goto done;
-		 } else {
-		 	printf("Sending packet successful\n");
-		 }
-		
-		printf("Yes, Incoming packet: \n");
-		printf("Packet size (bytes): %d\n", packet_size);
-		printf("Source address: %s\n", (char*)inet_ntoa(src_socket_address.sin_addr));
-		printf("destination address: %s\n", (char*)inet_ntoa(dest_socket_address.sin_addr));
-		printf("Identification: %d\n", ntohs(ip_packet->id));
-		printf("================================================\n");
-done:  goto repeat;
-		close(send_soc);
-		return 0;
+        //Send the same packet out
+        bytes_sent=write(sock,buffer,data_size);
+        printf("Sent %d bytes\n",bytes_sent);
+         if (bytes_sent < 0) {
+            perror("sendto");
+            exit(1);
+         }
+
+        }
+    }
+    close(sock_raw);
+    return 0;
 }
